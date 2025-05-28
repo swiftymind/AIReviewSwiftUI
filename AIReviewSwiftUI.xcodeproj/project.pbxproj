@@ -195,6 +195,9 @@
 			);
 			mainGroup = A2F63E7D2DB8C6E600F3F01A;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A2C354802DE7670100273361 /* XCRemoteSwiftPackageReference "viewinspector" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A2F63E872DB8C6E600F3F01A /* Products */;
 			projectDirPath = "";
@@ -550,6 +553,17 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A2C354802DE7670100273361 /* XCRemoteSwiftPackageReference "viewinspector" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/nalexn/viewinspector";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.10.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
 	};
 	rootObject = A2F63E7E2DB8C6E600F3F01A /* Project object */;
 }
