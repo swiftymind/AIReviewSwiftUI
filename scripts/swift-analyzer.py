@@ -95,7 +95,7 @@ def analyze_swift_files(files):
     """
 
     response = client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": "You are an expert iOS developer and code reviewer."},
             {"role": "user", "content": prompt}
@@ -125,7 +125,7 @@ def analyze_ui_files(files):
     """
 
     response = client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": "You are an expert iOS UI/UX developer and code reviewer."},
             {"role": "user", "content": prompt}
@@ -154,7 +154,7 @@ def analyze_config_files(files):
     """
 
     response = client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": "You are an expert iOS developer and code reviewer."},
             {"role": "user", "content": prompt}
@@ -183,7 +183,7 @@ def analyze_test_files(files):
     """
 
     response = client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": "You are an expert iOS developer and test reviewer."},
             {"role": "user", "content": prompt}
