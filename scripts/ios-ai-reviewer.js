@@ -16,6 +16,8 @@ function shouldIgnoreFile(filename) {
   return IGNORED_PATTERNS.some(pattern => filename.includes(pattern));
 }
 
+const postedComments = new Set();
+
 async function getPRHeadSHA() {
   const [owner, repo] = REPO.split('/');
   const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${PR_NUMBER}`;
@@ -28,29 +30,37 @@ async function getPRHeadSHA() {
   return response.data.head.sha;
 }
 
-async function main() {
+async function postInlineComment(path, position, body) {
   try {
-    // Get diff from the base (more robust than origin/main for forked PRs)
-    const diffOutput = execSync('git diff origin/HEAD HEAD', { encoding: 'utf8' });
-    const files = parse(diffOutput);
+    const [owner, repo] = REPO.split('/');
+    const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${PR_NUMBER}/comments`;
+    const commitSHA = await getPRHeadSHA();
 
-    for (const file of files) {
-      const filePath = file.to;
-      if (!filePath || filePath === '/dev/null' || shouldIgnoreFile(filePath)) continue;
+    const key = `${path}:${position}`;
+    if (postedComments.has(key)) {
+      console.log(`⚠️ Skipping duplicate comment on ${key}`);
+      return;
+    }
+    postedComments.add(key);
 
-      for (const chunk of file.chunks) {
-        for (const change of chunk.changes) {
-          if (change.add && change.position) {  // Use `position` instead of `line`
-            const prompt = generatePrompt(filePath, change.content);
-            const aiFeedback = await getAIReview(prompt);
-            await postInlineComment(filePath, change.position, aiFeedback);
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Rate limit safety
-          }
+    await axios.post(
+      url,
+      {
+        body,
+        commit_id: commitSHA,
+        path,
+        position
+      },
+      {
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json'
         }
       }
-    }
+    );
+    console.log(`✅ Posted comment on ${path} at position ${position}`);
   } catch (error) {
-    console.error('Error during AI review:', error);
+    console.error(`❌ Error posting comment:`, error.response?.data || error.message);
   }
 }
 
@@ -138,36 +148,33 @@ async function getAIReview(prompt) {
     );
     return response.data.choices[0].message.content.trim();
   } catch (error) {
-    console.error('Error fetching AI review:', error.response?.data || error.message);
+    console.error('❌ Error fetching AI review:', error.response?.data || error.message);
     return 'Error fetching AI review.';
   }
 }
 
-async function postInlineComment(path, position, body) {
+async function main() {
   try {
-    const [owner, repo] = REPO.split('/');
-    const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${PR_NUMBER}/comments`;
+    const diffOutput = execSync('git diff origin/HEAD HEAD', { encoding: 'utf8' });
+    const files = parse(diffOutput);
 
-    const commitSHA = await getPRHeadSHA();  // Dynamically get correct SHA
+    for (const file of files) {
+      const filePath = file.to;
+      if (!filePath || filePath === '/dev/null' || shouldIgnoreFile(filePath)) continue;
 
-    await axios.post(
-      url,
-      {
-        body,
-        commit_id: commitSHA,  // Use correct commit SHA
-        path,
-        position
-      },
-      {
-        headers: {
-          'Authorization': `token ${GITHUB_TOKEN}`,
-          'Accept': 'application/vnd.github.v3+json'
+      for (const chunk of file.chunks) {
+        for (const change of chunk.changes) {
+          if (change.add && change.position) {
+            const prompt = generatePrompt(filePath, change.content);
+            const aiFeedback = await getAIReview(prompt);
+            await postInlineComment(filePath, change.position, aiFeedback);
+            await new Promise(resolve => setTimeout(resolve, 3000)); // Rate limit to avoid abuse
+          }
         }
       }
-    );
-    console.log(`Posted comment on ${path} at position ${position}`);
+    }
   } catch (error) {
-    console.error(`Error posting comment:`, error.response?.data || error.message);
+    console.error('❌ Error during AI review:', error);
   }
 }
 
