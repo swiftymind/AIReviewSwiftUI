@@ -6,7 +6,6 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const REPO = process.env.GITHUB_REPOSITORY;
 const PR_NUMBER = process.env.PR_NUMBER;
-const COMMIT_ID = process.env.GITHUB_SHA;
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 const MAX_TOKENS = parseInt(process.env.MAX_TOKENS || '600');
 
@@ -15,6 +14,18 @@ const IGNORED_PATTERNS = ['.xcodeproj', '.xcworkspace', '.xcuserdata', '.xcschem
 
 function shouldIgnoreFile(filename) {
   return IGNORED_PATTERNS.some(pattern => filename.includes(pattern));
+}
+
+async function getPRHeadSHA() {
+  const [owner, repo] = REPO.split('/');
+  const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${PR_NUMBER}`;
+  const response = await axios.get(url, {
+    headers: {
+      'Authorization': `token ${GITHUB_TOKEN}`,
+      'Accept': 'application/vnd.github.v3+json'
+    }
+  });
+  return response.data.head.sha;
 }
 
 async function main() {
@@ -137,11 +148,13 @@ async function postInlineComment(path, position, body) {
     const [owner, repo] = REPO.split('/');
     const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${PR_NUMBER}/comments`;
 
+    const commitSHA = await getPRHeadSHA();  // Dynamically get correct SHA
+
     await axios.post(
       url,
       {
         body,
-        commit_id: COMMIT_ID,
+        commit_id: commitSHA,  // Use correct commit SHA
         path,
         position
       },
