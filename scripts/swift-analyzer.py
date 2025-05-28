@@ -1,10 +1,10 @@
 import os
 import requests
 import json
-import openai
+from openai import OpenAI
 
-# Set OpenAI API key
-openai.api_key = os.environ['OPENAI_API_KEY']
+# Initialize OpenAI client
+client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
 
 def analyze_ios_pr():
     github_token = os.environ['GITHUB_TOKEN']
@@ -94,7 +94,7 @@ def analyze_swift_files(files):
     Provide specific recommendations for iOS development.
     """
 
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": "You are an expert iOS developer and code reviewer."},
@@ -104,7 +104,7 @@ def analyze_swift_files(files):
         temperature=0.2
     )
 
-    return response['choices'][0]['message']['content']
+    return response.choices[0].message.content
 
 def analyze_ui_files(files):
     files_info = [{'name': f['filename'], 'changes': f['changes']} for f in files]
@@ -124,7 +124,7 @@ def analyze_ui_files(files):
     Provide iOS UI/UX specific recommendations.
     """
 
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": "You are an expert iOS UI/UX developer and code reviewer."},
@@ -134,7 +134,7 @@ def analyze_ui_files(files):
         temperature=0.2
     )
 
-    return response['choices'][0]['message']['content']
+    return response.choices[0].message.content
 
 def analyze_config_files(files):
     files_info = [{'name': f['filename'], 'changes': f['changes']} for f in files]
@@ -153,7 +153,7 @@ def analyze_config_files(files):
     Flag any potential issues for iOS app submission.
     """
 
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": "You are an expert iOS developer and code reviewer."},
@@ -163,7 +163,7 @@ def analyze_config_files(files):
         temperature=0.2
     )
 
-    return response['choices'][0]['message']['content']
+    return response.choices[0].message.content
 
 def analyze_test_files(files):
     files_info = [{'name': f['filename'], 'changes': f['changes']} for f in files]
@@ -182,7 +182,7 @@ def analyze_test_files(files):
     Suggest improvements for iOS testing.
     """
 
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": "You are an expert iOS developer and test reviewer."},
@@ -192,7 +192,7 @@ def analyze_test_files(files):
         temperature=0.2
     )
 
-    return response['choices'][0]['message']['content']
+    return response.choices[0].message.content
 
 def post_ios_analysis(token, repo, pr_number, analysis):
     headers = {
