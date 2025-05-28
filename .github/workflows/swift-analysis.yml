@@ -1,0 +1,53 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2822
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 name: Swift Code Analysis\
+on:\
+  pull_request:\
+    types: [opened, synchronize]\
+\
+jobs:\
+  swift-analysis:\
+    runs-on: macos-latest\
+    permissions:\
+      contents: read\
+      pull-requests: write\
+    \
+    steps:\
+      - name: Checkout code\
+        uses: actions/checkout@v4\
+      \
+      - name: Setup Xcode\
+        uses: maxim-lobanov/setup-xcode@v1\
+        with:\
+          xcode-version: latest-stable\
+      \
+      - name: Build project\
+        run: |\
+          xcodebuild -scheme AIReviewSwiftUI -destination 'platform=iOS Simulator,name=iPhone 15' build-for-testing\
+        continue-on-error: true\
+      \
+      - name: Run Tests\
+        run: |\
+          xcodebuild test -scheme AIReviewSwiftUI -destination 'platform=iOS Simulator,name=iPhone 15'\
+        continue-on-error: true\
+      \
+      - name: Setup Python\
+        uses: actions/setup-python@v4\
+        with:\
+          python-version: '3.9'\
+      \
+      - name: Install Python dependencies\
+        run: |\
+          pip install requests anthropic openai\
+      \
+      - name: Analyze Swift Code\
+        env:\
+          ANTHROPIC_API_KEY: $\{\{ secrets.ANTHROPIC_API_KEY \}\}\
+          GITHUB_TOKEN: $\{\{ secrets.GITHUB_TOKEN \}\}\
+          PR_NUMBER: $\{\{ github.event.number \}\}\
+        run: python scripts/swift-analyzer.py}
