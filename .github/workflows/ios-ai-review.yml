@@ -1,43 +1,43 @@
+# ios-ai-review.yml: GitHub Actions workflow for AI code review on iOS/Swift pull requests
+# This workflow triggers on pull request events for all branches (no hardcoded branch filters)
+# and uses a Node.js script with OpenAI GPT-4 (fallback to GPT-3.5) to provide code review comments.
+
 name: iOS AI Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, reopened, synchronize]  # Run on PR creation, updates, or reopening
+    branches: ['**']  # All branches included (no branch name hardcoding)
+
+permissions:
+  contents: read               # Allows reading repository content (for checkout)
+  pull-requests: write         # Required to post review comments to the PR
 
 jobs:
-  ios-ai-review:
-    runs-on: macos-latest
-    permissions:
-      contents: read
-      pull-requests: write
-
+  ai_review:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout repository code
+        uses: actions/checkout@v3
+        # Checkout the code so the reviewer script can read files if needed
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v3
         with:
-          node-version: '18'
+          node-version: 18    # Use Node 18 (supports top-level await and latest features)
 
-      - name: Cache Node.js dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
+      - name: Install Node dependencies
+        run: npm install axios
+        # Install Axios for HTTP requests (used to call GitHub and OpenAI APIs).
+        # (The OpenAI API will be called via HTTP; no separate OpenAI SDK required)
 
-      - name: Install AI dependencies
-        run: npm install axios parse-diff
-
-      - name: Run iOS AI Review
+      - name: Run AI code reviewer (Node.js)
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.number }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_SHA: ${{ github.sha }}
-          OPENAI_MODEL: gpt-4o
-          MAX_TOKENS: 600
-        run: node scripts/ios-ai-reviewer.js
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}       # GitHub token to call GitHub API
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}   # OpenAI API key for GPT-4/GPT-3.5
+          OPENAI_MODEL: gpt-4                             # Preferred model (will fallback to 3.5 if unavailable)
+          PR_NUMBER: ${{ github.event.pull_request.number }}   # Current pull request number
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }} # SHA of the latest commit in the PR
+          GITHUB_REPOSITORY: ${{ github.repository }}      # e.g. "owner/repo", passed to script for API calls
+        run: node ios-ai-reviewer.js
+        # Executes the Node.js AI reviewer script, which will analyze changes and post inline comments.
