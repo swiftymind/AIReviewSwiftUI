@@ -7,13 +7,22 @@
 
 import SwiftUI
 
-import SwiftUI
-
+/// Main task management view displaying task list and summary
 struct ContentView: View {
     @StateObject private var viewModel = TaskViewModel()
     @State private var newTaskTitle = ""
 
     var body: some View {
+        VStack {
+            taskInputSection
+            taskListSection
+            TaskSummaryView(viewModel: viewModel, totalTasks: viewModel.tasks.count, completedTasks: viewModel.completedTasks, overdueTasks: viewModel.overdueTasks)
+                .padding(.top)
+        }
+        .padding()
+    }
+
+    private var taskInputSection: some View {
         VStack {
             TextField("Enter task...", text: $newTaskTitle)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
@@ -23,23 +32,35 @@ struct ContentView: View {
                 viewModel.addTask(title: newTaskTitle)
                 newTaskTitle = ""
             }
-
-            List {
-                ForEach(viewModel.tasks) { task in
-                    HStack {
-                        Text(task.title)
-                        Spacer()
-                        Button(action: { viewModel.toggleComplete(task) }) {
-                            Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
-                        }
-                    }
-                }
-            }
-
-            Text("Total: \(viewModel.tasks.count) • Completed: \(viewModel.tasks.filter { $0.isCompleted }.count)")
-                .padding(.top)
+            .disabled(newTaskTitle.isEmpty)
         }
-        .padding()
+    }
+
+    private var taskListSection: some View {
+        List {
+            ForEach(viewModel.tasks) { task in
+                TaskRowView(task: task, onToggle: {
+                    viewModel.toggleComplete(task)
+                })
+            }
+        }
+    }
+}
+
+/// Individual task row displaying task title and completion status
+struct TaskRowView: View {
+    let task: Task // Assuming Task is your model
+    let onToggle: () -> Void
+
+    var body: some View {
+        HStack {
+            Text(task.title)
+            Spacer()
+            Button(action: onToggle) {
+                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                    .accessibilityLabel(task.isCompleted ? "Mark as incomplete" : "Mark as complete")
+            }
+        }
     }
 }
 
