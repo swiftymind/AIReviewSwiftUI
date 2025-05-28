@@ -1,8 +1,10 @@
 import os
 import requests
 import json
-import subprocess
-from anthropic import Anthropic
+import openai
+
+# Set OpenAI API key
+openai.api_key = os.environ['OPENAI_API_KEY']
 
 def analyze_ios_pr():
     github_token = os.environ['GITHUB_TOKEN']
@@ -36,8 +38,6 @@ def get_pr_details(token, repo, pr_number):
     }
 
 def analyze_ios_changes(pr_data):
-    client = Anthropic(api_key=os.environ['ANTHROPIC_API_KEY'])
-
     # Categorize iOS files
     swift_files = []
     ui_files = []
@@ -59,24 +59,24 @@ def analyze_ios_changes(pr_data):
     analysis_sections = []
 
     if swift_files:
-        swift_analysis = analyze_swift_files(client, swift_files)
+        swift_analysis = analyze_swift_files(swift_files)
         analysis_sections.append(f"## 🏎️ Swift Code Analysis\n{swift_analysis}")
 
     if ui_files:
-        ui_analysis = analyze_ui_files(client, ui_files)
+        ui_analysis = analyze_ui_files(ui_files)
         analysis_sections.append(f"## 🎨 UI/UX Analysis\n{ui_analysis}")
 
     if config_files:
-        config_analysis = analyze_config_files(client, config_files)
+        config_analysis = analyze_config_files(config_files)
         analysis_sections.append(f"## ⚙️ Configuration Analysis\n{config_analysis}")
 
     if test_files:
-        test_analysis = analyze_test_files(client, test_files)
+        test_analysis = analyze_test_files(test_files)
         analysis_sections.append(f"## 🧪 Test Analysis\n{test_analysis}")
 
     return "\n\n".join(analysis_sections)
 
-def analyze_swift_files(client, files):
+def analyze_swift_files(files):
     files_info = [{'name': f['filename'], 'changes': f['changes'], 'additions': f['additions']} for f in files]
 
     prompt = f"""
@@ -94,15 +94,19 @@ def analyze_swift_files(client, files):
     Provide specific recommendations for iOS development.
     """
 
-    response = client.messages.create(
-        model="claude-3-sonnet-20240229",
-        max_tokens=500,
-        messages=[{"role": "user", "content": prompt}]
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "You are an expert iOS developer and code reviewer."},
+            {"role": "user", "content": prompt}
+        ],
+        max_tokens=600,
+        temperature=0.2
     )
 
-    return response.content[0].text
+    return response['choices'][0]['message']['content']
 
-def analyze_ui_files(client, files):
+def analyze_ui_files(files):
     files_info = [{'name': f['filename'], 'changes': f['changes']} for f in files]
 
     prompt = f"""
@@ -120,15 +124,19 @@ def analyze_ui_files(client, files):
     Provide iOS UI/UX specific recommendations.
     """
 
-    response = client.messages.create(
-        model="claude-3-sonnet-20240229",
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "You are an expert iOS UI/UX developer and code reviewer."},
+            {"role": "user", "content": prompt}
+        ],
         max_tokens=400,
-        messages=[{"role": "user", "content": prompt}]
+        temperature=0.2
     )
 
-    return response.content[0].text
+    return response['choices'][0]['message']['content']
 
-def analyze_config_files(client, files):
+def analyze_config_files(files):
     files_info = [{'name': f['filename'], 'changes': f['changes']} for f in files]
 
     prompt = f"""
@@ -145,15 +153,19 @@ def analyze_config_files(client, files):
     Flag any potential issues for iOS app submission.
     """
 
-    response = client.messages.create(
-        model="claude-3-sonnet-20240229",
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "You are an expert iOS developer and code reviewer."},
+            {"role": "user", "content": prompt}
+        ],
         max_tokens=300,
-        messages=[{"role": "user", "content": prompt}]
+        temperature=0.2
     )
 
-    return response.content[0].text
+    return response['choices'][0]['message']['content']
 
-def analyze_test_files(client, files):
+def analyze_test_files(files):
     files_info = [{'name': f['filename'], 'changes': f['changes']} for f in files]
 
     prompt = f"""
@@ -170,13 +182,17 @@ def analyze_test_files(client, files):
     Suggest improvements for iOS testing.
     """
 
-    response = client.messages.create(
-        model="claude-3-sonnet-20240229",
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "You are an expert iOS developer and test reviewer."},
+            {"role": "user", "content": prompt}
+        ],
         max_tokens=300,
-        messages=[{"role": "user", "content": prompt}]
+        temperature=0.2
     )
 
-    return response.content[0].text
+    return response['choices'][0]['message']['content']
 
 def post_ios_analysis(token, repo, pr_number, analysis):
     headers = {
