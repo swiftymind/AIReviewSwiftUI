@@ -10,22 +10,30 @@ const COMMIT_ID = process.env.GITHUB_SHA;
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 const MAX_TOKENS = parseInt(process.env.MAX_TOKENS || '600');
 
+// Files to ignore
+const IGNORED_PATTERNS = ['.xcodeproj', '.xcworkspace', '.xcuserdata', '.xcscheme', '.plist', '.pbxproj'];
+
+function shouldIgnoreFile(filename) {
+  return IGNORED_PATTERNS.some(pattern => filename.includes(pattern));
+}
+
 async function main() {
   try {
-    const diffOutput = execSync('git diff origin/main HEAD', { encoding: 'utf8' });
+    // Get diff from the base (more robust than origin/main for forked PRs)
+    const diffOutput = execSync('git diff origin/HEAD HEAD', { encoding: 'utf8' });
     const files = parse(diffOutput);
 
     for (const file of files) {
       const filePath = file.to;
-      if (!filePath || filePath === '/dev/null') continue;
+      if (!filePath || filePath === '/dev/null' || shouldIgnoreFile(filePath)) continue;
 
       for (const chunk of file.chunks) {
         for (const change of chunk.changes) {
-          if (change.add && change.ln) {
+          if (change.add && change.position) {  // Use `position` instead of `line`
             const prompt = generatePrompt(filePath, change.content);
             const aiFeedback = await getAIReview(prompt);
-            await postInlineComment(filePath, change.ln, aiFeedback);
-            await new Promise(resolve => setTimeout(resolve, 1000)); // rate limit safety
+            await postInlineComment(filePath, change.position, aiFeedback);
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Rate limit safety
           }
         }
       }
@@ -124,7 +132,7 @@ async function getAIReview(prompt) {
   }
 }
 
-async function postInlineComment(path, line, body) {
+async function postInlineComment(path, position, body) {
   try {
     const [owner, repo] = REPO.split('/');
     const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${PR_NUMBER}/comments`;
@@ -135,8 +143,7 @@ async function postInlineComment(path, line, body) {
         body,
         commit_id: COMMIT_ID,
         path,
-        line,
-        side: 'RIGHT'
+        position
       },
       {
         headers: {
@@ -145,7 +152,7 @@ async function postInlineComment(path, line, body) {
         }
       }
     );
-    console.log(`Posted comment on ${path} at line ${line}`);
+    console.log(`Posted comment on ${path} at position ${position}`);
   } catch (error) {
     console.error(`Error posting comment:`, error.response?.data || error.message);
   }

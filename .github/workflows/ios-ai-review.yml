@@ -28,10 +28,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
 
-      - name: Install AI dependencies (axios, parse-diff)
+      - name: Install AI dependencies
         run: npm install axios parse-diff
 
-      - name: Run iOS AI Review (line-by-line)
+      - name: Run iOS AI Review
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
