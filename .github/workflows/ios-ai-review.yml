@@ -35,9 +35,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}       # GitHub token to call GitHub API
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}   # OpenAI API key for GPT-4/GPT-3.5
-          OPENAI_MODEL: gpt-4                             # Preferred model (will fallback to 3.5 if unavailable)
+          OPENAI_MODEL: gpt-4o                             # Preferred model (will fallback to 3.5 if unavailable)
           PR_NUMBER: ${{ github.event.pull_request.number }}   # Current pull request number
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }} # SHA of the latest commit in the PR
           GITHUB_REPOSITORY: ${{ github.repository }}      # e.g. "owner/repo", passed to script for API calls
-        run: node ios-ai-reviewer.js
+        run: node scripts/ios-ai-reviewer.js
         # Executes the Node.js AI reviewer script, which will analyze changes and post inline comments.
