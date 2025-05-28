@@ -1,8 +1,8 @@
 name: iOS AI Code Review
+
 on:
   pull_request:
     types: [opened, synchronize]
-    branches: [main, develop, release/*]
 
 jobs:
   ios-ai-review:
@@ -14,48 +14,30 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
-
-      - name: Get changed iOS files
-        id: changed-files
-        uses: tj-actions/changed-files@v40
-        with:
-          files: |
-            **/*.swift
-            **/*.m
-            **/*.h
-            **/*.storyboard
-            **/*.xib
-            **/*.xcconfig
-            **/*.plist
-            **/Podfile
-            **/Package.swift
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      - name: Install dependencies
-        run: npm install axios
+      - name: Cache Node.js dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
 
-      - name: Run iOS AI Review
+      - name: Install AI dependencies (axios, parse-diff)
+        run: npm install axios parse-diff
+
+      - name: Run iOS AI Review (line-by-line)
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.number }}
-        run: node scripts/ios-ai-reviewer.js "${{ steps.changed-files.outputs.all_changed_files }}"
-
-      - name: Swift Lint Check
-        run: |
-          if command -v swiftlint >/dev/null 2>&1; then
-            swiftlint --reporter github-actions-logging
-          else
-            echo "SwiftLint not installed, skipping..."
-          fi
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          OPENAI_MODEL: gpt-4o
+          MAX_TOKENS: 600
+        run: node scripts/ios-ai-reviewer.js

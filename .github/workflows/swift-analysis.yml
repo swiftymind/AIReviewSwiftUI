@@ -1,4 +1,5 @@
 name: Swift Code Analysis
+
 on:
   pull_request:
     types: [opened, synchronize]
@@ -14,6 +15,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
@@ -21,12 +30,12 @@ jobs:
 
       - name: Build project
         run: |
-          xcodebuild -scheme AIReviewSwiftUI -destination 'platform=iOS Simulator,name=iPhone 15' build-for-testing
+          xcodebuild -scheme ${{ secrets.IOS_SCHEME_NAME }} -destination 'platform=iOS Simulator,name=iPhone 15' build-for-testing
         continue-on-error: true
 
       - name: Run Tests
         run: |
-          xcodebuild test -scheme AIReviewSwiftUI -destination 'platform=iOS Simulator,name=iPhone 15'
+          xcodebuild test -scheme ${{ secrets.IOS_SCHEME_NAME }} -destination 'platform=iOS Simulator,name=iPhone 15'
         continue-on-error: true
 
       - name: Setup Python
@@ -43,4 +52,5 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.number }}
+          OPENAI_MODEL: gpt-4o
         run: python scripts/swift-analyzer.py

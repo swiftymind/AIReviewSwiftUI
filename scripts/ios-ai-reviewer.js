@@ -1,156 +1,154 @@
 const axios = require('axios');
 const { execSync } = require('child_process');
-const fs = require('fs');
+const parse = require('parse-diff');
 
-async function reviewiOSCode() {
-  const changedFiles = process.argv[2]?.split(' ') || [];
-  const prNumber = process.env.PR_NUMBER;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const REPO = process.env.GITHUB_REPOSITORY;
+const PR_NUMBER = process.env.PR_NUMBER;
+const COMMIT_ID = process.env.GITHUB_SHA;
+const MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
+const MAX_TOKENS = parseInt(process.env.MAX_TOKENS || '600');
 
-  if (changedFiles.length === 0) {
-    console.log('No iOS files to review');
-    return;
-  }
+async function main() {
+  try {
+    const diffOutput = execSync('git diff origin/main HEAD', { encoding: 'utf8' });
+    const files = parse(diffOutput);
 
-  // Group files by type for better analysis
-  const fileGroups = groupFilesByType(changedFiles);
-
-  for (const [fileType, files] of Object.entries(fileGroups)) {
     for (const file of files) {
-      try {
-        const diff = execSync(`git diff origin/main HEAD -- "${file}"`, { encoding: 'utf8' });
-        if (!diff.trim()) continue;
+      const filePath = file.to;
+      if (!filePath || filePath === '/dev/null') continue;
 
-        const review = await analyzeIOSFile(file, diff, fileType);
-        await postReviewComment(prNumber, file, review, fileType);
-
-        // Add delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-      } catch (error) {
-        console.error(`Error reviewing ${file}:`, error.message);
+      for (const chunk of file.chunks) {
+        for (const change of chunk.changes) {
+          if (change.add && change.ln) {
+            const prompt = generatePrompt(filePath, change.content);
+            const aiFeedback = await getAIReview(prompt);
+            await postInlineComment(filePath, change.ln, aiFeedback);
+            await new Promise(resolve => setTimeout(resolve, 1000)); // rate limit safety
+          }
+        }
       }
     }
+  } catch (error) {
+    console.error('Error during AI review:', error);
   }
 }
 
-function groupFilesByType(files) {
-  const groups = {
-    swift: [],
-    objc: [],
-    ui: [],
-    config: [],
-    dependencies: []
-  };
-
-  files.forEach(file => {
-    if (file.endsWith('.swift')) {
-      groups.swift.push(file);
-    } else if (file.endsWith('.m') || file.endsWith('.h')) {
-      groups.objc.push(file);
-    } else if (file.endsWith('.storyboard') || file.endsWith('.xib')) {
-      groups.ui.push(file);
-    } else if (file.endsWith('.plist') || file.endsWith('.xcconfig')) {
-      groups.config.push(file);
-    } else if (file.includes('Podfile') || file.includes('Package.swift')) {
-      groups.dependencies.push(file);
-    }
-  });
-
-  return groups;
-}
-
-async function analyzeIOSFile(filename, diff, fileType) {
+function generatePrompt(filePath, code) {
+  const fileType = getFileType(filePath);
   const systemPrompts = {
     swift: `You are a senior iOS developer and Swift expert. Review this Swift code for:
-    - Memory management issues (retain cycles, weak/strong references)
-    - iOS-specific best practices and design patterns
-    - SwiftUI vs UIKit appropriate usage
-    - Performance optimizations for mobile
-    - Security concerns (keychain usage, data protection)
-    - Accessibility implementation
-    - Threading issues (main queue violations)
-    - App lifecycle considerations`,
+- Memory management issues
+- iOS best practices
+- Performance
+- Security
+- Threading safety
+- App lifecycle considerations`,
 
-    objc: `You are a senior iOS developer with Objective-C expertise. Focus on:
-    - Memory management (ARC issues, retain cycles)
-    - Proper use of categories and protocols
-    - Foundation framework best practices
-    - C/Objective-C interoperability
-    - Legacy code compatibility`,
+    swiftui: `You are a senior iOS developer and SwiftUI expert. Review this SwiftUI code for:
+- View composition
+- State management
+- Accessibility
+- Performance optimizations
+- Animations
+- Responsiveness across devices
+- Concurrency and MainActor issues`,
 
-    ui: `You are a UI/UX expert for iOS apps. Review for:
-    - Auto Layout constraints and adaptability
-    - Accessibility labels and traits
-    - Dynamic Type support
-    - Dark mode compatibility
-    - iPhone/iPad layout differences
-    - Performance implications of UI choices`,
+    objc: `You are a senior iOS Objective-C expert. Check for:
+- Memory management (ARC)
+- Categories, protocols
+- Legacy issues
+- Interop concerns`,
 
-    config: `You are an iOS build and configuration expert. Check for:
-    - Build settings appropriateness
-    - Security configurations
-    - App Store submission requirements
-    - Privacy settings and permissions
-    - Performance impact of configurations`,
+    ui: `You are an iOS UI/UX expert. Check for:
+- Auto Layout
+- Accessibility
+- Dynamic Type
+- Dark mode
+- Performance`,
 
-    dependencies: `You are an iOS dependency management expert. Review for:
-    - Security vulnerabilities in dependencies
-    - Version compatibility issues
-    - Performance impact of added libraries
-    - Alternative native iOS solutions
-    - License compatibility`
+    config: `You are an iOS build expert. Check for:
+- Build settings
+- Privacy permissions
+- App Store compliance`,
+
+    dependencies: `You are an iOS dependency expert. Review for:
+- Security vulnerabilities
+- Version conflicts
+- Performance impact
+- License issues`
   };
 
-  const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-    model: 'gpt-4',
-    messages: [
+  return `${systemPrompts[fileType] || systemPrompts.swift}\n\nReview this code change:\n${code}\n\nProvide specific, actionable feedback.`;
+}
+
+function getFileType(filePath) {
+  if (filePath.endsWith('.swift')) {
+    if (filePath.toLowerCase().includes('view') || filePath.toLowerCase().includes('swiftui')) {
+      return 'swiftui';
+    }
+    return 'swift';
+  }
+  if (filePath.endsWith('.m') || filePath.endsWith('.h')) return 'objc';
+  if (filePath.endsWith('.storyboard') || filePath.endsWith('.xib')) return 'ui';
+  if (filePath.endsWith('.plist') || filePath.endsWith('.xcconfig')) return 'config';
+  if (filePath.includes('Podfile') || filePath.includes('Package.swift')) return 'dependencies';
+  return 'swift';
+}
+
+async function getAIReview(prompt) {
+  try {
+    const response = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
       {
-        role: 'system',
-        content: systemPrompts[fileType] || systemPrompts.swift
+        model: MODEL,
+        messages: [
+          { role: 'system', content: 'You are an expert iOS developer and code reviewer.' },
+          { role: 'user', content: prompt }
+        ],
+        max_tokens: MAX_TOKENS,
+        temperature: 0.2
       },
       {
-        role: 'user',
-        content: `iOS File: ${filename}\n\nDiff:\n${diff}\n\nProvide specific, actionable feedback focused on iOS development best practices.`
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json'
+        }
       }
-    ],
-    max_tokens: 600,
-    temperature: 0.2
-  }, {
-    headers: {
-      'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-      'Content-Type': 'application/json'
-    }
-  });
-
-  return response.data.choices[0].message.content;
+    );
+    return response.data.choices[0].message.content.trim();
+  } catch (error) {
+    console.error('Error fetching AI review:', error.response?.data || error.message);
+    return 'Error fetching AI review.';
+  }
 }
 
-async function postReviewComment(prNumber, filename, review, fileType) {
-  const typeEmojis = {
-    swift: '🏎️',
-    objc: '⚙️',
-    ui: '🎨',
-    config: '⚙️',
-    dependencies: '📦'
-  };
+async function postInlineComment(path, line, body) {
+  try {
+    const [owner, repo] = REPO.split('/');
+    const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${PR_NUMBER}/comments`;
 
-  const comment = `## ${typeEmojis[fileType] || '📱'} iOS AI Review - ${filename}
-
-${review}
-
----
-*Generated by iOS AI Code Reviewer*`;
-
-  await axios.post(
-    `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/issues/${prNumber}/comments`,
-    { body: comment },
-    {
-      headers: {
-        'Authorization': `token ${process.env.GITHUB_TOKEN}`,
-        'Accept': 'application/vnd.github.v3+json'
+    await axios.post(
+      url,
+      {
+        body,
+        commit_id: COMMIT_ID,
+        path,
+        line,
+        side: 'RIGHT'
+      },
+      {
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
       }
-    }
-  );
+    );
+    console.log(`Posted comment on ${path} at line ${line}`);
+  } catch (error) {
+    console.error(`Error posting comment:`, error.response?.data || error.message);
+  }
 }
 
-reviewiOSCode().catch(console.error);
+main();
