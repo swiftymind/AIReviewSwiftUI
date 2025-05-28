@@ -48,7 +48,6 @@ jobs:
       - name: Run iOS AI Review
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.number }}
         run: node scripts/ios-ai-reviewer.js "${{ steps.changed-files.outputs.all_changed_files }}"
